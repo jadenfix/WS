@@ -1,143 +1,85 @@
+"""Export California crime tables from saved HTML or Wikipedia to clean CSVs."""
+from __future__ import annotations
 
-# # Webscraping in Python 
-
-from bs4 import BeautifulSoup
-import requests
-
-# GET request
-url = 'https://en.wikipedia.org/wiki/California_locations_by_crime_rate'
-page = requests.get(url)
-soup = BeautifulSoup(page.text, 'html')
-
-print(soup)
-
-
-table0 = soup.find_all('table')[0]
-print(table0)
-
-
-table1 = soup.find_all('table')[1]
-print(table1)
-
-
-table2 = soup.find_all('table')[2]
-print(table2)
-
-
-table1col = table1.find_all('th')
-print(table1col)
-
-
-table1columns = [title.text.strip() for title in table1col]
-print(table1columns)
-
-
-#remove brackets & stuff inside
+import argparse
+import csv
+import json
 import re
-def remove_brackets(text):
-    return re.sub(r'\[.*?\]', '', text).strip()
+from pathlib import Path
 
-# Cleaned column titles
-table1columns = [remove_brackets(title) for title in table1columns]
+import requests
+from bs4 import BeautifulSoup
 
-table1columns
-
-table2col = table2.find_all('th')
-print(table2col)
-
-table2columns = [title.text.strip() for title in table2col]
-print(table2columns)
-
-#remove brackets
-def remove_brackets(text):
-    return re.sub(r'\[.*?\]', '', text).strip()
-
-# Cleaned column titles
-table2columns = [remove_brackets(title) for title in table2columns]
-print(table2columns)
-
-import pandas as pd 
-
-df1 = pd.DataFrame(columns = table1columns)
-df1
-
-df2 = pd.DataFrame(columns = table2columns)
-df2
-
-col1 =  table1.find_all('tr')
-print(col1)
+URL = "https://en.wikipedia.org/wiki/California_locations_by_crime_rate"
 
 
-for row in col1[1:]:
-    row1 = table1.find_all('td')
-    row1data = [data.text.strip() for data in row1]
-print(row1data)
-
-for i in range(0, len(row1data), 7):
-    chunk = row1data[i:i+7]
-    if len(chunk) == 7:
-        df1.loc[len(df1)] = chunk
-
-#Remove commas
-    df1 = df1.replace(',','',regex=True)
-
-print(df1)
-
-df2
-
-col2 =  table2.find_all('tr')
-
-for row in col2[1:]:
-    row2 = table2.find_all('td')
-    row2data = [data.text.strip() for data in row2]
-print(row2data)
-
-print(df2)
+def clean_text(value: str) -> str:
+    return " ".join(re.sub(r"\[[^\]]*\]", "", value).split())
 
 
+def extract_tables(html: str) -> dict[str, list[dict[str, str]]]:
+    soup = BeautifulSoup(html, "html.parser")
+    result = {}
+    for table in soup.find_all("table"):
+        headers = []
+        records = []
+        for row in table.find_all("tr"):
+            cells = row.find_all(["th", "td"], recursive=False)
+            if not cells:
+                continue
+            values = [clean_text(cell.get_text(" ", strip=True)) for cell in cells]
+            if all(cell.name == "th" for cell in cells):
+                headers = values
+                continue
+            if headers and len(values) == len(headers):
+                records.append(dict(zip(headers, values)))
+        if not records or "Population" not in headers or "County" not in headers:
+            continue
+        kind = "cities" if any("City" in name or "Agency" in name for name in headers) else "counties"
+        if kind in result:
+            raise ValueError(f"More than one {kind} table matched; inspect the source schema")
+        for record in records:
+            for key, value in record.items():
+                # Preserve labels and fractional rates; remove numeric grouping commas only.
+                if re.fullmatch(r"-?\d[\d,]*(?:\.\d+)?", value):
+                    record[key] = value.replace(",", "")
+        result[kind] = records
+    if set(result) != {"counties", "cities"}:
+        raise ValueError("Expected county and city crime tables; source schema may have changed")
+    return result
 
-for i in range(0, len(row2data), 8):
-    chunk = row2data[i:i+8]
-    if len(chunk) == 8:
-        df2.loc[len(df2)] = chunk
-df2 = df2.replace(',','',regex=True)
 
-print(df2)
-
-df2
-
-df1
-
-
-print(df1.dtypes)
+def export_tables(tables: dict[str, list[dict[str, str]]], output: Path) -> dict[str, int]:
+    output.mkdir(parents=True, exist_ok=True)
+    counts = {}
+    for kind, records in tables.items():
+        with (output / f"{kind}.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(records[0]))
+            writer.writeheader()
+            writer.writerows(records)
+        counts[kind] = len(records)
+    return counts
 
 
-df1['County'] = df1['County'].astype('category')
-df1['Population'] = pd.to_numeric(df1['Population'], errors='coerce')
-df1['Populationdensity'] = pd.to_numeric(df1['Populationdensity'], errors='coerce')
-df1['Violent crimes'] = pd.to_numeric(df1['Violent crimes'], errors='coerce')
-df1['Violent crime rateper 1,000 persons'] = pd.to_numeric(df1['Violent crime rateper 1,000 persons'], errors='coerce')
-df1['Property crimes '] = pd.to_numeric(df1['Property crimes'], errors='coerce')
-df1['Property crime rateper 1,000 persons'] = pd.to_numeric(df1['Property crime rateper 1,000 persons'], errors='coerce')
-print(df1.dtypes)
-df1_encoded = pd.get_dummies(df1, columns=['County'], drop_first=False)
-df1_encoded = df1_encoded.astype(int)
-print(df1_encoded)
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", type=Path, help="Saved HTML for an offline, reproducible run")
+    parser.add_argument("--output", type=Path, default=Path("output"))
+    args = parser.parse_args(argv)
+    if args.input:
+        html = args.input.read_text(encoding="utf-8")
+        source = str(args.input)
+    else:
+        response = requests.get(URL, timeout=30, headers={"User-Agent": "CaliforniaCrimeTables/1.0"})
+        response.raise_for_status()
+        html = response.text
+        source = URL
+    counts = export_tables(extract_tables(html), args.output)
+    summary = {"source": source, "rows": counts}
+    (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(json.dumps(summary, indent=2))
+    return 0
 
-print(df2.dtypes)
 
-
-df2['City/Agency'] = df2['City/Agency'].astype('category')
-df2['County'] = df2['County'].astype('category')
-df2['Population'] = pd.to_numeric(df2['Population'], errors='coerce')
-df2['Populationdensity'] = pd.to_numeric(df2['Populationdensity'], errors='coerce')
-df2['Violent crimes'] = pd.to_numeric(df2['Violent crimes'], errors='coerce')
-df2['Violent crime rateper 1,000 persons'] = pd.to_numeric(df2['Violent crime rateper 1,000 persons'], errors='coerce')
-df2['Property crimes'] = pd.to_numeric(df2['Property crimes'], errors='coerce')
-df2['Property crime rateper 1,000 persons'] = pd.to_numeric(df2['Property crime rateper 1,000 persons'], errors='coerce')
-print(df2.dtypes)
-
-df2_encoded = pd.get_dummies(df2, columns=['County','City/Agency' ], drop_first=False)
-df2_encoded = df2_encoded.astype(int)
-print(df2_encoded)
-
+if __name__ == "__main__":
+    raise SystemExit(main())
