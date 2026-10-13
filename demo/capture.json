@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "claim": "Actual offline CLI run against a fictional checked-in fixture",
+  "nonclaims": [
+    "The demo does not verify or display live Wikipedia data.",
+    "The fictional records are not crime statistics or current estimates."
+  ],
+  "source_commit": "c57a3ad0dc8b111050f524a40cb7f02e93238f47",
+  "input": "examples/crime-tables.html",
+  "observed_html_tables": 3,
+  "rows": {
+    "counties": 1,
+    "cities": 1
+  },
+  "evidence": {
+    "citation_removed": "Example County [1] -> Example County",
+    "population_grouping_removed": "12,345 -> 12345",
+    "fractional_rate_preserved": "1.38"
+  },
+  "output_sha256": {
+    "counties.csv": "9b2f989436e3119110bdba56a0df899870a5452e7b404ec1c408fac0895d5280",
+    "cities.csv": "624c1d19ae3043d54c33f16b6a83e9d8dfd6e742c3a6b43acbd912e5dbb79b42",
+    "summary.json": "2a1a58c322150a7e1ae0d9bcc993be9e8524f3aea09fea1dcc8534f593bac12c"
+  },
+  "recording": {
+    "width": 1280,
+    "height": 720,
+    "fps": 12,
+    "frames": 174
+  },
+  "media": {
+    "ws-offline-demo.gif": {
+      "sha256": "a0329f190f18efe0ff5d849eb57cd5a2f5e850e74a8ad6c9e8ea2d731eded3fc",
+      "bytes": 799515
+    },
+    "ws-offline-demo.mp4": {
+      "sha256": "063edd03612ec6de7ff62ac3d1d790ffd03508c1d0b82148f28190189c9f8cca",
+      "bytes": 325746
+    }
+  }
+}

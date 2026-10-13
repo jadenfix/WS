@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_commit": "c57a3ad0dc8b111050f524a40cb7f02e93238f47",
+  "scope": "Actual offline CLI run against the fictional checked-in fixture",
+  "files": {
+    "Crime-Web-Scraping.py": "7e1430be29872d14a081b8cbbe010c472e7ee9a8fb3766bfa592a7765128584d",
+    "examples/crime-tables.html": "d35b000e6a01600a19f9a8e722f2176fa6921620c865f3d40357ef4c57624602",
+    "requirements.txt": "f00328ba43fe8eca5a8f8765b4997657517cf0e25d0b1989da253d6153c54699",
+    "tests/test_scraper.py": "4a7044343658fe14c3fbdfbdb44c0c4ee5c3a012b3377da37b7cd4d907d9623f"
+  }
+}
